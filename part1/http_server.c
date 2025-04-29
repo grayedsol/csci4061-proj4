@@ -27,9 +27,19 @@ int main(int argc, char **argv) {
         printf("Usage: %s <directory> <port>\n", argv[0]);
         return 1;
     }
-    // Uncomment the lines below to use these definitions:
+    // Server directory and port definitions:
     const char* serve_dir = argv[1];
     const char* port = argv[2];
+
+    // Set up SIGINT handler
+    struct sigaction sig;
+    sig.sa_handler = handle_sigint;
+    sigfillset(&sig.sa_mask);
+    sig.sa_flags = 0;
+    if (sigaction(SIGINT, &sig, NULL) < 0) {
+        perror("sigaction");
+        return 1;
+    }
 
     // Socket Setup
     struct addrinfo hints;
@@ -71,7 +81,42 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // TODO Main Server Loop
+    // Main Server Loop
+    while (keep_going) {
+        printf("Waiting...\n");
+        int client_fd = accept(sock_fd, NULL, NULL);
+        if (client_fd < 0) {
+            if (errno == EINTR) {
+                perror("accept");
+                close(sock_fd);
+                return 1;
+            }
+            break;
+        }
+
+        printf("Connected!\n");
+
+        char resource_name[BUFSIZE] = { 0 };
+        if (read_http_request(sock_fd, resource_name) < 0) {
+            close(sock_fd);
+            return 1;
+        }
+
+        char resource_path[BUFSIZE] = { 0 };
+        strncpy(resource_path, serve_dir, BUFSIZE - 1);
+        strncat(resource_path, resource_name, BUFSIZE - strlen(resource_path) - 1);
+
+        if (write_http_response(client_fd, resource_path) < 0) {
+            close(client_fd);
+            break;
+        }
+
+        if (close(client_fd < 0)) {
+            perror("close");
+        }
+
+        printf("Disconnected.\n");
+    }
 
     // Cleanup
     if (close(sock_fd) < 0) {
