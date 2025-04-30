@@ -97,13 +97,15 @@ int main(int argc, char **argv) {
         printf("Connected!\n");
 
         char resource_name[BUFSIZE] = { 0 };
-        if (read_http_request(sock_fd, resource_name) < 0) {
+        if (read_http_request(client_fd, resource_name) < 0) {
             close(sock_fd);
+            close(client_fd);
             return 1;
         }
 
         char resource_path[BUFSIZE] = { 0 };
         strncpy(resource_path, serve_dir, BUFSIZE - 1);
+        strncat(resource_path, "/", 2);
         strncat(resource_path, resource_name, BUFSIZE - strlen(resource_path) - 1);
 
         if (write_http_response(client_fd, resource_path) < 0) {
