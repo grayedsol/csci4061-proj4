@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
         printf("Waiting...\n");
         int client_fd = accept(sock_fd, NULL, NULL);
         if (client_fd < 0) {
-            if (errno == EINTR) {
+            if (errno != EINTR) {
                 perror("accept");
                 close(sock_fd);
                 return 1;
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
             break;
         }
 
-        if (close(client_fd < 0)) {
+        if (close(client_fd) < 0) {
             perror("close");
         }
 

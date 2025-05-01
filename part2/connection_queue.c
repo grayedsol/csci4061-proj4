@@ -30,7 +30,7 @@ int connection_queue_enqueue(connection_queue_t *queue, int connection_fd) {
     }
     // Add item to queue
     queue->client_fds[queue->write_idx] = connection_fd;
-    queue->write_idx = queue->write_idx == CAPACITY ? 0 : queue->write_idx + 1;
+    queue->write_idx = queue->write_idx + 1 == CAPACITY ? 0 : queue->write_idx + 1;
     queue->length++;
 
     if (queue->length == 1) { pthread_cond_signal(&queue->queue_empty); }
@@ -54,7 +54,7 @@ int connection_queue_dequeue(connection_queue_t *queue) {
     // Remove item from queue
     ret_val = queue->client_fds[queue->read_idx];
     queue->client_fds[queue->read_idx] = -1;
-    queue->read_idx = queue->read_idx == CAPACITY ? 0 : queue->read_idx + 1;
+    queue->read_idx = queue->read_idx + 1 == CAPACITY ? 0 : queue->read_idx + 1;
     queue->length--;
 
     if (queue->length == CAPACITY - 1) { pthread_cond_signal(&queue->queue_full); }
@@ -67,6 +67,7 @@ int connection_queue_dequeue(connection_queue_t *queue) {
 int connection_queue_shutdown(connection_queue_t *queue) {
     pthread_mutex_lock(&queue->lock);
     queue->shutdown = 1;
+    queue->length = -1;
     pthread_cond_broadcast(&queue->queue_full);
     pthread_cond_broadcast(&queue->queue_empty);
     pthread_mutex_unlock(&queue->lock);

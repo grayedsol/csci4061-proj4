@@ -25,6 +25,35 @@ void handle_sigint(int signo) {
     keep_going = 0;
 }
 
+void* worker_thread_func(void* arg) {
+    connection_queue_t* queue = (connection_queue_t*)arg;
+    int client_fd = -1;
+    while ((client_fd = connection_queue_dequeue(queue)) != -1) {
+        char resource_name[BUFSIZE] = { 0 };
+        if (read_http_request(client_fd, resource_name) < 0) {
+            close(client_fd);
+            continue;
+        }
+
+        char resource_path[BUFSIZE] = { 0 };
+        strncpy(resource_path, serve_dir, BUFSIZE - 1);
+        strncat(resource_path, "/", 2);
+        strncat(resource_path, resource_name, BUFSIZE - strlen(resource_path) - 1);
+
+        if (write_http_response(client_fd, resource_path) < 0) {
+            close(client_fd);
+            continue;
+        }
+
+        if (close(client_fd) < 0) {
+            perror("close");
+        }
+
+        // printf("Disconnected.\n");
+    }
+    
+    return NULL;
+}
 
 int main(int argc, char **argv) {
     // First argument is directory to serve, second is port
@@ -33,8 +62,19 @@ int main(int argc, char **argv) {
         return 1;
     }
     // Server directory and port definitions:
-    const char* serve_dir = argv[1];
+    serve_dir = argv[1];
     const char* port = argv[2];
+
+    // Set up connection queue
+    connection_queue_t queue;
+    connection_queue_init(&queue);
+
+    // Block SIGINT for now
+    sigset_t sig_blocked;
+    sigset_t sig_unblocked;
+    sigemptyset(&sig_blocked);
+    sigaddset(&sig_blocked, SIGINT);
+    sigprocmask(SIG_BLOCK, &sig_blocked, &sig_unblocked);
 
     // Set up SIGINT handler
     struct sigaction sig;
@@ -86,12 +126,24 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // Create worker threads
+    int thread_result;
+    pthread_t worker_threads[N_THREADS];
+    for (int i = 0; i < N_THREADS; i++) {
+        if ((thread_result = pthread_create(&worker_threads[i], NULL, worker_thread_func, &queue)) != 0) {
+            fprintf(stderr, "pthread_create: %s\n", strerror(thread_result));
+        }
+    }
+
+    // Unblock SIGINT
+    sigprocmask(SIG_SETMASK, &sig_unblocked, NULL);
+
     // Main Server Loop
     while (keep_going) {
-        printf("Waiting...\n");
+        // printf("Waiting...\n");
         int client_fd = accept(sock_fd, NULL, NULL);
         if (client_fd < 0) {
-            if (errno == EINTR) {
+            if (errno != EINTR) {
                 perror("accept");
                 close(sock_fd);
                 return 1;
@@ -99,33 +151,25 @@ int main(int argc, char **argv) {
             break;
         }
 
-        printf("Connected!\n");
+        // printf("Connected!\n");
 
-        char resource_name[BUFSIZE] = { 0 };
-        if (read_http_request(client_fd, resource_name) < 0) {
-            close(sock_fd);
-            close(client_fd);
-            return 1;
+        if (connection_queue_enqueue(&queue, client_fd) < 0) {
+            keep_going = 0;
         }
+    }
 
-        char resource_path[BUFSIZE] = { 0 };
-        strncpy(resource_path, serve_dir, BUFSIZE - 1);
-        strncat(resource_path, "/", 2);
-        strncat(resource_path, resource_name, BUFSIZE - strlen(resource_path) - 1);
+    connection_queue_shutdown(&queue);
 
-        if (write_http_response(client_fd, resource_path) < 0) {
-            close(client_fd);
-            break;
+    // Clean up worker threads
+    for (int i = 0; i < N_THREADS; i++) {
+        if ((thread_result = pthread_join(worker_threads[i], NULL)) != 0) {
+            fprintf(stderr, "pthread_join: %s\n", strerror(thread_result));
         }
-
-        if (close(client_fd < 0)) {
-            perror("close");
-        }
-
-        printf("Disconnected.\n");
     }
 
     // Cleanup
+    connection_queue_free(&queue);
+
     if (close(sock_fd) < 0) {
         perror("close");
         return 1;
