@@ -32,10 +32,103 @@ int main(int argc, char **argv) {
         printf("Usage: %s <directory> <port>\n", argv[0]);
         return 1;
     }
-    // Uncomment the lines below to use these definitions:
-    // serve_dir = argv[1];
-    // const char *port = argv[2];
+    // Server directory and port definitions:
+    const char* serve_dir = argv[1];
+    const char* port = argv[2];
 
-    // TODO Implement the rest of this function
+    // Set up SIGINT handler
+    struct sigaction sig;
+    sig.sa_handler = handle_sigint;
+    sigfillset(&sig.sa_mask);
+    sig.sa_flags = 0;
+    if (sigaction(SIGINT, &sig, NULL) < 0) {
+        perror("sigaction");
+        return 1;
+    }
+
+    // Socket Setup
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+    struct addrinfo* server;
+    
+    // Set up address info
+    if (getaddrinfo(NULL, port, &hints, &server) != 0) {
+        perror("getaddrinfo");
+        return 1;
+    }
+
+    // Create socket file descriptor
+    int sock_fd = socket(server->ai_family, server->ai_socktype, server->ai_protocol);
+    if (sock_fd < 0) {
+        perror("socket");
+        freeaddrinfo(server);
+        return 1;
+    }
+    
+    // Bind socket to port
+    if (bind(sock_fd, server->ai_addr, server->ai_addrlen) < 0) {
+        perror("bind");
+        freeaddrinfo(server);
+        close(sock_fd);
+        return 1;
+    }
+
+    // Free the no longer needed address info
+    freeaddrinfo(server);
+
+    // Designate socket as server socket
+    if (listen(sock_fd, LISTEN_QUEUE_LEN) < 0) {
+        perror("listen");
+        close(sock_fd);
+        return 1;
+    }
+
+    // Main Server Loop
+    while (keep_going) {
+        printf("Waiting...\n");
+        int client_fd = accept(sock_fd, NULL, NULL);
+        if (client_fd < 0) {
+            if (errno == EINTR) {
+                perror("accept");
+                close(sock_fd);
+                return 1;
+            }
+            break;
+        }
+
+        printf("Connected!\n");
+
+        char resource_name[BUFSIZE] = { 0 };
+        if (read_http_request(client_fd, resource_name) < 0) {
+            close(sock_fd);
+            close(client_fd);
+            return 1;
+        }
+
+        char resource_path[BUFSIZE] = { 0 };
+        strncpy(resource_path, serve_dir, BUFSIZE - 1);
+        strncat(resource_path, "/", 2);
+        strncat(resource_path, resource_name, BUFSIZE - strlen(resource_path) - 1);
+
+        if (write_http_response(client_fd, resource_path) < 0) {
+            close(client_fd);
+            break;
+        }
+
+        if (close(client_fd < 0)) {
+            perror("close");
+        }
+
+        printf("Disconnected.\n");
+    }
+
+    // Cleanup
+    if (close(sock_fd) < 0) {
+        perror("close");
+        return 1;
+    }
     return 0;
 }
