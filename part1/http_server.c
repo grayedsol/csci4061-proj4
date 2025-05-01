@@ -83,7 +83,6 @@ int main(int argc, char **argv) {
 
     // Main Server Loop
     while (keep_going) {
-        printf("Waiting...\n");
         int client_fd = accept(sock_fd, NULL, NULL);
         if (client_fd < 0) {
             if (errno != EINTR) {
@@ -93,8 +92,6 @@ int main(int argc, char **argv) {
             }
             break;
         }
-
-        printf("Connected!\n");
 
         char resource_name[BUFSIZE] = { 0 };
         if (read_http_request(client_fd, resource_name) < 0) {
@@ -116,8 +113,6 @@ int main(int argc, char **argv) {
         if (close(client_fd) < 0) {
             perror("close");
         }
-
-        printf("Disconnected.\n");
     }
 
     // Cleanup

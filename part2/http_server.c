@@ -48,8 +48,6 @@ void* worker_thread_func(void* arg) {
         if (close(client_fd) < 0) {
             perror("close");
         }
-
-        // printf("Disconnected.\n");
     }
     
     return NULL;
@@ -140,7 +138,6 @@ int main(int argc, char **argv) {
 
     // Main Server Loop
     while (keep_going) {
-        // printf("Waiting...\n");
         int client_fd = accept(sock_fd, NULL, NULL);
         if (client_fd < 0) {
             if (errno != EINTR) {
@@ -150,8 +147,6 @@ int main(int argc, char **argv) {
             }
             break;
         }
-
-        // printf("Connected!\n");
 
         if (connection_queue_enqueue(&queue, client_fd) < 0) {
             keep_going = 0;

@@ -90,8 +90,6 @@ int read_http_request(int fd, char *resource_name) {
 int write_http_response(int fd, const char *resource_path) {
     struct stat statinfo;
     if (stat(resource_path, &statinfo) < 0) {
-        printf("%s\n", resource_path);
-        printf("404\n");
         if (write(fd, not_found_string, strlen(not_found_string) + 1) < 0) {
             perror("write");
             return -1;
@@ -111,20 +109,22 @@ int write_http_response(int fd, const char *resource_path) {
     // Write the top of the HTTP response
     const char* mime_type = get_mime_type(strrchr(resource_path, '.'));
     snprintf(buf, BUFSIZE, ok_string, mime_type, statinfo.st_size);
-    write(fd, buf, strlen(buf));
+    if (write(fd, buf, strlen(buf)) < 0) {
+        perror("write");
+        close(resource_fd);
+        return -1;
+    }
 
     memset(buf, 0, BUFSIZE);
 
     // Write the body of the HTTP response
-    while (1) {
-        int bytes_read = read(resource_fd, buf, BUFSIZE);
+    int bytes_read = -1;
+    while (bytes_read) {
+        bytes_read = read(resource_fd, buf, BUFSIZE);
         if (bytes_read < 0) {
             perror("read");
             close(resource_fd);
             return -1;
-        }
-        else if (bytes_read == 0) {
-            break;
         }
         else if (write(fd, buf, bytes_read) < 0) {
             perror("write");
