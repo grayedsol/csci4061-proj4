@@ -90,8 +90,6 @@ int read_http_request(int fd, char *resource_name) {
 int write_http_response(int fd, const char *resource_path) {
     struct stat statinfo;
     if (stat(resource_path, &statinfo) < 0) {
-        printf("%s\n", resource_path);
-        printf("404\n");
         if (write(fd, not_found_string, strlen(not_found_string) + 1) < 0) {
             perror("write");
             return -1;
