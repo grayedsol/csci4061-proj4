@@ -41,14 +41,24 @@ int connection_queue_enqueue(connection_queue_t *queue, int connection_fd) {
 }
 
 int connection_queue_dequeue(connection_queue_t *queue) {
+    int result;
     int ret_val = -1;
-    pthread_mutex_lock(&queue->lock);
+    if((result = pthread_mutex_lock(&queue->lock)) != 0){
+        fprintf(stderr, "pthread_mutex_lock: %s\n", strerror(result));
+        return -1;
+    }
 
     while (queue->length == 0) {
-        pthread_cond_wait(&queue->queue_empty, &queue->lock);
+        if((pthread_cond_wait(&queue->queue_empty, &queue->lock)) != 0){
+            fprintf(stderr, "pthread_cond_wait: %s\n", strerror(result));
+            return -1;
+        }
     }
     if (queue->shutdown) {
-        pthread_mutex_unlock(&queue->lock);
+        if((result = pthread_mutex_unlock(&queue->lock)) != 0){
+            fprintf(stderr, "pthread_mutex_unlock: %s\n", strerror(result));
+            return -1;
+        }
         return -1;
     }
     // Remove item from queue
@@ -57,26 +67,57 @@ int connection_queue_dequeue(connection_queue_t *queue) {
     queue->read_idx = queue->read_idx + 1 == CAPACITY ? 0 : queue->read_idx + 1;
     queue->length--;
 
-    if (queue->length == CAPACITY - 1) { pthread_cond_signal(&queue->queue_full); }
+    if (queue->length == CAPACITY - 1) { 
+        if((result = pthread_cond_signal(&queue->queue_full)) != 0){
+            fprintf(stderr, "pthread_cond_signal: %s\n", strerror(result));
+            return -1;
+        }
+    }
 
-    pthread_mutex_unlock(&queue->lock);
+    if((result = pthread_mutex_unlock(&queue->lock)) != 0){
+        fprintf(stderr, "pthread_mutex_unlock: %s\n", strerror(result));
+        return -1;
+    }
 
     return ret_val;
 }
 
 int connection_queue_shutdown(connection_queue_t *queue) {
-    pthread_mutex_lock(&queue->lock);
+    int result;
+    if((result = pthread_mutex_lock(&queue->lock)) != 0){
+        fprintf(stderr, "pthread_mutex_lock: %s\n", strerror(result));
+        return -1;
+    }
     queue->shutdown = 1;
     queue->length = -1;
-    pthread_cond_broadcast(&queue->queue_full);
-    pthread_cond_broadcast(&queue->queue_empty);
-    pthread_mutex_unlock(&queue->lock);
+    if((result = pthread_cond_broadcast(&queue->queue_full)) != 0){
+        fprintf(stderr, "pthread_cond_broadcast: %s\n", strerror(result));
+        return -1;
+    }
+    if((result = pthread_cond_broadcast(&queue->queue_empty)) != 0){
+        fprintf(stderr, "pthread_cond_broadcast: %s\n", strerror(result));
+        return -1;
+    }
+    if((result = pthread_mutex_unlock(&queue->lock)) != 0){
+        fprintf(stderr, "pthread_mutex_unlock: %s\n", strerror(result));
+        return -1;
+    }
     return 0;
 }
 
 int connection_queue_free(connection_queue_t *queue) {
-    pthread_mutex_destroy(&queue->lock);
-    pthread_cond_destroy(&queue->queue_full);
-    pthread_cond_destroy(&queue->queue_empty);
+    int result;
+    if((result = pthread_mutex_destroy(&queue->lock)) != 0){
+        fprintf(stderr, "pthread_mutex_destroy: %s\n", strerror(result));
+        return -1;
+    }
+    if((result = pthread_cond_destroy(&queue->queue_full)) != 0){
+        fprintf(stderr, "pthread_cond_destroy: %s\n", strerror(result));
+        return -1;
+    }
+    if((result = pthread_cond_destroy(&queue->queue_empty)) != 0){
+        fprintf(stderr, "pthread_cond_destroy: %s\n", strerror(result));
+        return -1;
+    }
     return 0;
 }
